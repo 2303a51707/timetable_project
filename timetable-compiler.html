@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timetable Compiler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root{
+    --bg: #0a0d12;
+    --bg-raised: #10141b;
+    --bg-panel: #131822;
+    --bg-input: #0d1119;
+    --border: #232a37;
+    --border-bright: #313b4d;
+    --text: #dbe1eb;
+    --text-dim: #7c8698;
+    --text-faint: #4b5563;
+    --accent: #7ee787;
+    --accent-dim: #4a9d5a;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+
+    --c1: #7dd3fc;
+    --c2: #fbbf24;
+    --c3: #86efac;
+    --c4: #c4b5fd;
+    --c5: #fca5a5;
+    --c6: #67e8f9;
+    --c7: #fdba74;
+    --c8: #f9a8d4;
+    --c9: #a3e635;
+    --c10: #93c5fd;
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(126,231,135,0.07), transparent),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before{
+    content:'';
+    position: fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 28px 28px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap{
+    position: relative;
+    z-index: 1;
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* header */
+  .eyebrow{
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom: 18px;
+  }
+  .eyebrow::before{ content:'//'; color: var(--text-faint); }
+  .cursor{
+    display:inline-block;
+    width: 8px; height: 16px;
+    background: var(--accent);
+    animation: blink 1.1s steps(1) infinite;
+    vertical-align: -3px;
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  h1{
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: clamp(32px, 5vw, 46px);
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    margin: 0 0 14px;
+    color: #f2f5f9;
+  }
+  h1 .dim{ color: var(--text-dim); }
+  .lede{
+    font-size: 16px;
+    color: var(--text-dim);
+    max-width: 560px;
+    margin: 0 0 44px;
+  }
+  .lede code{
+    font-family: var(--mono);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--c1);
+    font-size: 0.92em;
+  }
+
+  /* step cards */
+  .step{
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    opacity: 0.4;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .step.active{ opacity: 1; pointer-events: auto; }
+  .step.done{ opacity: 1; pointer-events: auto; }
+
+  .step-head{
+    display:flex;
+    align-items:center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+  .step-num{
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--bg);
+    background: var(--text-faint);
+    width: 22px; height:22px;
+    border-radius: 5px;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .step.active .step-num, .step.done .step-num{ background: var(--accent); }
+  .step-title{
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .step-check{
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    display:none;
+  }
+  .step.done .step-check{ display:inline; }
+
+  .step-body{ padding: 22px; }
+
+  /* dropzone */
+  .dropzone{
+    border: 1.5px dashed var(--border-bright);
+    border-radius: 8px;
+    padding: 36px 20px;
+    text-align:center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    background: var(--bg-input);
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color: var(--accent-dim);
+    background: rgba(126,231,135,0.04);
+  }
+  .dropzone .icon{
+    font-family: var(--mono);
+    font-size: 22px;
+    color: var(--text-faint);
+    margin-bottom: 10px;
+  }
+  .dropzone .main{
+    font-size: 14.5px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .dropzone .sub{
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  .dropzone .main b{ color: var(--accent); font-weight:600; }
+  input[type=file]{ display:none; }
+
+  .file-chip{
+    display:flex; align-items:center; gap:10px;
+    font-family: var(--mono); font-size: 13px;
+    color: var(--text);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 14px;
+  }
+  .file-chip .dot{ width:7px; height:7px; border-radius:50%; background: var(--accent); flex-shrink:0; }
+  .file-chip .clear{
+    margin-left:auto; color: var(--text-faint); cursor:pointer; font-size: 12px;
+    border: 1px solid var(--border); border-radius:5px; padding: 3px 8px;
+    background: none;
+  }
+  .file-chip .clear:hover{ color: var(--c5); border-color: var(--c5); }
+
+  .log{
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .log div::before{ content: '> '; color: var(--text-faint); }
+  .log .ok{ color: var(--accent); }
+  .log .err{ color: var(--c5); }
+
+  /* config step */
+  .field{ margin-bottom: 20px; }
+  .field label{
+    display:block;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    letter-spacing: 0.02em;
+  }
+  .field label .opt{ color: var(--text-faint); }
+  input[type=text]{
+    width:100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 11px 13px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  input[type=text]:focus{ border-color: var(--accent-dim); }
+  input[type=text]::placeholder{ color: var(--text-faint); }
+
+  .course-search{ margin-bottom: 10px; }
+  .course-list{
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg-input);
+  }
+  .course-item{
+    display:flex; align-items:center; gap:10px;
+    padding: 10px 13px;
+    border-bottom: 1px solid var(--border);
+    cursor:pointer;
+    font-size: 13.5px;
+  }
+  .course-item:last-child{ border-bottom:none; }
+  .course-item:hover{ background: rgba(255,255,255,0.02); }
+  .course-item input{ accent-color: var(--accent); width:15px; height:15px; flex-shrink:0; }
+  .course-item .swatch{
+    width:9px; height:9px; border-radius:2px; flex-shrink:0; opacity:0;
+  }
+  .course-item.checked .swatch{ opacity:1; }
+  .course-item .name{ color: var(--text); font-family: var(--mono); font-size: 12.5px; }
+  .course-item .sessions{ margin-left:auto; color: var(--text-faint); font-size: 11px; font-family: var(--mono); }
+  .course-empty{ padding: 18px; text-align:center; color: var(--text-faint); font-family: var(--mono); font-size:12.5px; }
+
+  .selected-count{
+    font-family: var(--mono); font-size: 12px; color: var(--text-faint); margin-top:10px;
+  }
+  .selected-count b{ color: var(--accent); }
+
+  /* buttons */
+  .btn{
+    font-family: var(--mono);
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 12px 22px;
+    border-radius: 7px;
+    border: 1px solid var(--border-bright);
+    background: var(--bg-panel);
+    color: var(--text);
+    cursor: pointer;
+    display:inline-flex; align-items:center; gap:8px;
+    transition: all 0.15s ease;
+  }
+  .btn:hover{ border-color: var(--accent-dim); color: var(--accent); }
+  .btn:disabled{ opacity: 0.35; cursor: not-allowed; }
+  .btn:disabled:hover{ border-color: var(--border-bright); color: var(--text); }
+  .btn-primary{
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0a0d12;
+  }
+  .btn-primary:hover{ background: #8ff096; color: #0a0d12; opacity: 0.92; }
+  .btn-row{ display:flex; gap:12px; align-items:center; margin-top: 22px; }
+  .btn-ghost{
+    background: none; border-color: var(--border);
+    color: var(--text-faint);
+  }
+  .btn-ghost:hover{ color: var(--text); border-color: var(--border-bright); }
+
+  /* output terminal window */
+  .term{
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--bg-raised);
+    margin-top: 8px;
+  }
+  .term-bar{
+    display:flex; align-items:center; gap:8px;
+    padding: 12px 16px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  .term-bar .dots{ display:flex; gap:6px; }
+  .term-bar .dots span{ width:9px; height:9px; border-radius:50%; background: var(--border-bright); }
+  .term-title{ margin-left: 4px; }
+
+  .grid-scroll{ overflow-x: auto; padding: 22px; }
+  table.tt{
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 620px;
+    font-family: var(--mono);
+  }
+  table.tt th, table.tt td{
+    border: 1px solid var(--border);
+    padding: 0;
+  }
+  table.tt thead th{
+    background: var(--bg-panel);
+    color: var(--text-dim);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 12px 10px;
+    text-transform: uppercase;
+  }
+  table.tt thead th:first-child{ width: 108px; }
+  table.tt tbody td.time-cell{
+    background: var(--bg-panel);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight:600;
+    text-align:center;
+    padding: 10px 6px;
+    white-space: nowrap;
+  }
+  table.tt tbody td.slot{
+    background: var(--bg-input);
+    height: 64px;
+    vertical-align: middle;
+  }
+  .entry{
+    height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap: 2px;
+    padding: 8px 6px;
+    text-align:center;
+  }
+  .entry .cname{ font-size: 11.5px; font-weight:700; line-height:1.25; }
+  .entry .ctype{ font-size: 9.5px; opacity: 0.85; text-transform:uppercase; letter-spacing:0.03em; }
+  .entry .croom{ font-size: 9.5px; opacity: 0.7; }
+
+  .term-footer{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 16px 22px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-panel);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .legend{ display:flex; flex-wrap:wrap; gap: 10px 16px; }
+  .legend-item{ display:flex; align-items:center; gap:7px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .legend-item .sw{ width:9px; height:9px; border-radius:2px; flex-shrink:0; }
+
+  .warn{
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--c2);
+    background: rgba(251,191,36,0.06);
+    border: 1px solid rgba(251,191,36,0.25);
+    border-radius: 7px;
+    padding: 12px 14px;
+    margin-top: 6px;
+  }
+
+  footer{
+    max-width: 880px;
+    margin: 40px auto 0;
+    padding: 0 24px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-faint);
+    text-align:center;
+    position:relative; z-index:1;
+  }
+
+  @media (max-width: 560px){
+    .wrap{ padding: 36px 16px 60px; }
+    .step-body{ padding:16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">academic tools<span class="cursor"></span></div>
+  <h1>Timetable<br><span class="dim">Compiler.</span></h1>
+  <p class="lede">Upload your batch's master schedule, pick the courses you're actually taking, and get back a clean image of just your own week — no digging through <code>23CSBTB##</code> roster columns by hand.</p>
+
+  <!-- STEP 1 -->
+  <div class="step active" id="step1">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div class="step-title">upload timetable.xlsx</div>
+      <div class="step-check">✓ parsed</div>
+    </div>
+    <div class="step-body">
+      <div class="dropzone" id="dropzone">
+        <div class="icon">⌘</div>
+        <div class="main">Drop your file here, or <b>browse</b></div>
+        <div class="sub">.xlsx exported from your college's timetable system</div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+      </div>
+      <div id="fileChipHolder"></div>
+      <div class="log" id="parseLog"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step" id="step2">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div class="step-title">select your courses</div>
+      <div class="step-check">✓ configured</div>
+    </div>
+    <div class="step-body">
+      <div class="field">
+        <label>Your roll number <span class="opt">— optional, but needed if a course runs as multiple batches/sections</span></label>
+        <input type="text" id="rollInput" placeholder="e.g. 23CSBTB24">
+      </div>
+      <div class="field">
+        <label>Courses detected in this sheet</label>
+        <input type="text" class="course-search" id="courseSearch" placeholder="filter courses…">
+        <div class="course-list" id="courseList"></div>
+        <div class="selected-count" id="selectedCount"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="generateBtn" disabled>▸ generate timetable</button>
+      </div>
+      <div class="warn" id="warnBox" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- OUTPUT -->
+  <div id="outputHolder"></div>
+
+  <div class="btn-row" id="resetRow" style="display:none;">
+    <button class="btn btn-ghost" id="resetBtn">↺ start over with a new file</button>
+  </div>
+
+</div>
+
+<footer>runs entirely in your browser — nothing is uploaded anywhere</footer>
+
+<script>
+const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const PALETTE = ['c1','c2','c3','c4','c5','c6','c7','c8','c9','c10'];
+const ENTRY_RE = /([A-Z0-9][A-Za-z0-9 ,\-]*?)\s*\(([PLT])\):\s*\(([^)]+)\)\s+([^:()]+):\s*\(([^)]+)\)/g;
+const TYPE_LABEL = { P: 'Practical', L: 'Lecture', T: 'Tutorial' };
+
+let parsedEntries = [];
+let masterTimeSlots = [];
+let uniqueCourses = [];
+let courseColors = {};
+let selectedCourses = new Set();
+
+const el = id => document.getElementById(id);
+const step1 = el('step1'), step2 = el('step2');
+const dropzone = el('dropzone'), fileInput = el('fileInput');
+const parseLog = el('parseLog'), fileChipHolder = el('fileChipHolder');
+const rollInput = el('rollInput');
+const courseSearch = el('courseSearch'), courseList = el('courseList'), selectedCount = el('selectedCount');
+const generateBtn = el('generateBtn'), warnBox = el('warnBox');
+const outputHolder = el('outputHolder'), resetRow = el('resetRow'), resetBtn = el('resetBtn');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function logLine(msg, cls){
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  parseLog.appendChild(d);
+}
+
+function handleFile(file){
+  parseLog.innerHTML = '';
+  fileChipHolder.innerHTML = `
+    <div class="file-chip" style="margin-bottom:14px;">
+      <div class="dot"></div>
+      <span>${file.name}</span>
+      <button class="clear" id="clearFile">remove</button>
+    </div>`;
+  el('clearFile').addEventListener('click', resetAll);
+
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try{
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      logLine(`opened sheet "${sheetName}"`, 'ok');
+      parseSheet(rows);
+    } catch(err){
+      logLine('could not read this file — is it a valid .xlsx export?', 'err');
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseSheet(rows){
+  let headerRowIdx = -1, dayCols = {};
+  for (let r = 0; r < rows.length; r++){
+    const row = rows[r];
+    const found = {};
+    for (let c = 0; c < row.length; c++){
+      const val = String(row[c] || '').trim();
+      const match = DAY_NAMES.find(d => d.toLowerCase() === val.toLowerCase());
+      if (match) found[c] = match;
+    }
+    if (Object.keys(found).length >= 3){ headerRowIdx = r; dayCols = found; break; }
+  }
+
+  if (headerRowIdx === -1){
+    logLine('couldn\'t find a row of weekday headers (Monday, Tuesday…) in this sheet', 'err');
+    return;
+  }
+  logLine(`found day columns on row ${headerRowIdx + 1}`, 'ok');
+
+  const dayColIndices = Object.keys(dayCols).map(Number);
+  const timeColIdx = Math.min(...dayColIndices) - 1;
+
+  const entries = [];
+  const timeSlots = [];
+  for (let r = headerRowIdx + 1; r < rows.length; r++){
+    const row = rows[r];
+    const timeVal = String(row[timeColIdx] || '').trim();
+    if (!timeVal || !/^\d{1,2}:\d{2}/.test(timeVal)) continue;
+    timeSlots.push(timeVal);
+    for (const [colIdx, dayName] of Object.entries(dayCols)){
+      const cellVal = String(row[Number(colIdx)] || '');
+      if (!cellVal.trim()) continue;
+      let m;
+      ENTRY_RE.lastIndex = 0;
+      while ((m = ENTRY_RE.exec(cellVal)) !== null){
+        entries.push({
+          time: timeVal, day: dayName,
+          name: m[1].trim(), type: m[2],
+          room: m[3].trim(), faculty: m[4].trim(),
+          roster: m[5].split(',').map(s => s.trim())
+        });
+      }
+    }
+  }
+
+  logLine(`scanned ${timeSlots.length} time slots across ${dayColIndices.length} days`, 'ok');
+
+  if (entries.length === 0){
+    logLine('no course sessions could be parsed from this sheet — the format may differ from what this tool expects', 'err');
+    return;
+  }
+
+  parsedEntries = entries;
+  masterTimeSlots = timeSlots;
+  uniqueCourses = [...new Set(entries.map(e => e.name))].sort();
+  uniqueCourses.forEach((c, i) => { courseColors[c] = PALETTE[i % PALETTE.length]; });
+
+  logLine(`found ${entries.length} course sessions, ${uniqueCourses.length} distinct courses`, 'ok');
+
+  step1.classList.add('done');
+  step2.classList.add('active');
+  renderCourseList();
+}
+
+function renderCourseList(filter){
+  const f = (filter || '').toLowerCase();
+  const list = uniqueCourses.filter(c => c.toLowerCase().includes(f));
+  courseList.innerHTML = '';
+  if (list.length === 0){
+    courseList.innerHTML = '<div class="course-empty">no courses match that search</div>';
+    return;
+  }
+  list.forEach(name => {
+    const count = parsedEntries.filter(e => e.name === name).length;
+    const row = document.createElement('div');
+    row.className = 'course-item' + (selectedCourses.has(name) ? ' checked' : '');
+    row.innerHTML = `
+      <input type="checkbox" ${selectedCourses.has(name) ? 'checked' : ''}>
+      <span class="swatch" style="background:var(--${courseColors[name]})"></span>
+      <span class="name">${name}</span>
+      <span class="sessions">${count} sessions</span>`;
+    row.addEventListener('click', e => {
+      if (e.target.tagName !== 'INPUT'){
+        const cb = row.querySelector('input');
+        cb.checked = !cb.checked;
+      }
+      toggleCourse(name, row.querySelector('input').checked, row);
+    });
+    courseList.appendChild(row);
+  });
+}
+
+function toggleCourse(name, checked, row){
+  if (checked) selectedCourses.add(name); else selectedCourses.delete(name);
+  row.classList.toggle('checked', checked);
+  updateSelectedCount();
+}
+
+function updateSelectedCount(){
+  selectedCount.innerHTML = `<b>${selectedCourses.size}</b> course${selectedCourses.size===1?'':'s'} selected`;
+  generateBtn.disabled = selectedCourses.size === 0;
+}
+
+courseSearch.addEventListener('input', e => renderCourseList(e.target.value));
+
+function to12h(t){
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  let h12 = h % 12; if (h12 === 0) h12 = 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+function addHour(t){
+  const [h, m] = t.split(':').map(Number);
+  const total = (h * 60 + m + 60) % (24 * 60);
+  return `${String(Math.floor(total/60)).padStart(2,'0')}:${String(total%60).padStart(2,'0')}`;
+}
+
+generateBtn.addEventListener('click', () => {
+  warnBox.style.display = 'none';
+  const roll = rollInput.value.trim();
+  let filtered = parsedEntries.filter(e => selectedCourses.has(e.name));
+  if (roll){
+    filtered = filtered.filter(e => e.roster.includes(roll));
+  }
+
+  if (filtered.length === 0){
+    warnBox.style.display = 'block';
+    warnBox.textContent = roll
+      ? `No sessions found for roll number "${roll}" in the selected courses. Check the spelling/format matches how it appears in the sheet, or leave it blank.`
+      : `No sessions found for the selected courses.`;
+    outputHolder.innerHTML = '';
+    resetRow.style.display = 'none';
+    return;
+  }
+
+  buildTimetable(filtered);
+});
+
+function buildTimetable(filtered){
+  const times = [...new Set(filtered.map(e => e.time))];
+  const sortedAll = masterTimeSlots.filter(t => times.includes(t));
+  const firstIdx = masterTimeSlots.indexOf(sortedAll[0]);
+  const lastIdx = masterTimeSlots.indexOf(sortedAll[sortedAll.length - 1]);
+  const rowTimes = masterTimeSlots.slice(firstIdx, lastIdx + 1);
+
+  const days = DAY_NAMES.filter(d => filtered.some(e => e.day === d));
+
+  const grid = {};
+  filtered.forEach(e => { grid[`${e.time}|${e.day}`] = e; });
+
+  let theadCols = days.map(d => `<th>${d}</th>`).join('');
+  let bodyRows = rowTimes.map(t => {
+    const cells = days.map(d => {
+      const e = grid[`${t}|${d}`];
+      if (!e){
+        return `<td class="slot"></td>`;
+      }
+      const color = `var(--${courseColors[e.name]})`;
+      return `<td class="slot"><div class="entry" style="background:${color}22; color:${color}; border-left:3px solid ${color};">
+        <div class="cname">${e.name}</div>
+        <div class="ctype">${TYPE_LABEL[e.type]}</div>
+        <div class="croom">${e.room}</div>
+      </div></td>`;
+    }).join('');
+    return `<tr><td class="time-cell">${to12h(t)}<br>–<br>${to12h(addHour(t))}</td>${cells}</tr>`;
+  }).join('');
+
+  const legendItems = [...selectedCourses].map(name =>
+    `<div class="legend-item"><span class="sw" style="background:var(--${courseColors[name]})"></span>${name}</div>`
+  ).join('');
+
+  outputHolder.innerHTML = `
+    <div class="step done" style="opacity:1;">
+      <div class="step-head">
+        <div class="step-num">3</div>
+        <div class="step-title">your timetable</div>
+      </div>
+      <div class="step-body">
+        <div class="term" id="termCapture">
+          <div class="term-bar">
+            <div class="dots"><span></span><span></span><span></span></div>
+            <span class="term-title">my-timetable.png</span>
+          </div>
+          <div class="grid-scroll">
+            <table class="tt">
+              <thead><tr><th>Time</th>${theadCols}</tr></thead>
+              <tbody>${bodyRows}</tbody>
+            </table>
+          </div>
+          <div class="term-footer">
+            <div class="legend">${legendItems}</div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="downloadBtn">⬇ download as PNG</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  el('downloadBtn').addEventListener('click', downloadImage);
+  resetRow.style.display = 'flex';
+  document.getElementById('termCapture').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function downloadImage(){
+  const node = document.getElementById('termCapture');
+  const btn = el('downloadBtn');
+  btn.textContent = '⏳ rendering…';
+  btn.disabled = true;
+  html2canvas(node, { backgroundColor: '#10141b', scale: 2 }).then(canvas => {
+    const link = document.createElement('a');
+    link.download = 'my-timetable.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    btn.textContent = '⬇ download as PNG';
+    btn.disabled = false;
+  }).catch(err => {
+    console.error(err);
+    btn.textContent = '⬇ download as PNG';
+    btn.disabled = false;
+  });
+}
+
+function resetAll(){
+  parsedEntries = []; masterTimeSlots = []; uniqueCourses = [];
+  courseColors = {}; selectedCourses = new Set();
+  fileInput.value = '';
+  fileChipHolder.innerHTML = '';
+  parseLog.innerHTML = '';
+  rollInput.value = '';
+  courseSearch.value = '';
+  courseList.innerHTML = '';
+  selectedCount.textContent = '';
+  generateBtn.disabled = true;
+  warnBox.style.display = 'none';
+  outputHolder.innerHTML = '';
+  resetRow.style.display = 'none';
+  step1.classList.remove('done');
+  step2.classList.remove('active', 'done');
+}
+resetBtn.addEventListener('click', resetAll);
+</script>
+</body>
+</html>
